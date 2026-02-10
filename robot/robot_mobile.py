@@ -57,4 +57,11 @@ class RobotMobile:
         if self.moteur is not None:
             self.moteur.mettre_a_jour(self.dt)
 
+    #Affichage & méthodes spéciales
+    def afficher(self):
+        print(self)
+
+    def __str__(self):
+        return f"(x={self.x:.2f}, y={self.y:.2f}, orientation={self.orientation:.2f})"
+
     
