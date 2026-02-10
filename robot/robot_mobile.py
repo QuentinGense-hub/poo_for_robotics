@@ -64,4 +64,13 @@ class RobotMobile:
     def __str__(self):
         return f"(x={self.x:.2f}, y={self.y:.2f}, orientation={self.orientation:.2f})"
 
+    #Méthodes statiques / de classe
+    @classmethod
+    def nombre_robots(cls):
+        return cls._nb_robots
+
+    @staticmethod
+    def moteur_valide(moteur):
+        return isinstance(moteur, Moteur)
+
     
