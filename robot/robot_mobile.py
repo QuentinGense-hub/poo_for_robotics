@@ -47,3 +47,14 @@ class RobotMobile:
 
     def tourner(self, angle):
         self.orientation += angle
+
+    #Polymorphisme par composition
+    def commander(self, **kwargs):
+        if self.moteur is not None:
+            self.moteur.commander(**kwargs)
+
+    def mettre_a_jour(self, dt):
+        if self.moteur is not None:
+            self.moteur.mettre_a_jour(self.dt)
+
+    
