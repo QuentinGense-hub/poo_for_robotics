@@ -14,3 +14,28 @@ class RobotMobile:
 
         self.moteur = moteur
         RobotMobile._nb_robots += 1
+
+    #Encapsulation
+    @property
+    def x(self):
+        return self.__x
+
+    @x.setter
+    def x(self, value):
+        self.__x = float(value)
+
+    @property
+    def y(self):
+        return self.__y
+
+    @y.setter
+    def y(self, value):
+        self.__y = float(value)
+
+    @property
+    def orientation(self):
+        return self.__orientation
+
+    @orientation.setter
+    def orientation(self, value):
+        self.__orientation = value % (2 * math.pi)
