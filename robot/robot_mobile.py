@@ -39,3 +39,11 @@ class RobotMobile:
     @orientation.setter
     def orientation(self, value):
         self.__orientation = value % (2 * math.pi)
+
+    #Méthodes de base
+    def avancer(self, distance):
+        self.__x += distance * math.cos(self.__orientation)
+        self.__y += distance * math.sin(self.__orientation)
+
+    def tourner(self, angle):
+        self.orientation += angle
