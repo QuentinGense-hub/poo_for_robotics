@@ -55,7 +55,7 @@ class RobotMobile:
 
     def mettre_a_jour(self, dt):
         if self.moteur is not None:
-            self.moteur.mettre_a_jour(self.dt)
+            self.moteur.mettre_a_jour(self, dt)
 
     #Affichage & méthodes spéciales
     def afficher(self):
