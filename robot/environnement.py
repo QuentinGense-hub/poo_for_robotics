@@ -22,7 +22,7 @@ class Environnement:
         self.robot.mettre_a_jour(dt)
 
         # Vérification collision
-        if self.collision():
+        if self.collision() or self.collision_bord():
             # Annulation déplacement
             self.robot.set_position(ancien_x, ancien_y)
 
@@ -31,5 +31,26 @@ class Environnement:
         for obstacle in self.obstacles:
             if obstacle.collision(self.robot):
                 return True
+
+        return False
+
+    def collision_bord(self):
+
+        x = self.robot.x
+        y = self.robot.y
+        r = self.robot.rayon
+
+        # Limites monde centré en (0,0)
+        demi_largeur = self.largeur / 2
+        demi_hauteur = self.hauteur / 2
+
+        if x - r < -demi_largeur:
+            return True
+        if x + r > demi_largeur:
+            return True
+        if y - r < -demi_hauteur:
+            return True
+        if y + r > demi_hauteur:
+            return True
 
         return False
