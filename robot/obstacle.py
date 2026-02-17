@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import math
+import pygame
 
 class Obstacle(ABC):
 
@@ -16,7 +17,7 @@ class ObstacleCirculaire(Obstacle):
 
     def __init__(self, x, y, rayon):
         self._x = x
-        self._y = _y
+        self._y = y
         self._rayon = rayon
 
     def collision(self, robot):
@@ -32,5 +33,4 @@ class ObstacleCirculaire(Obstacle):
         px, py = vue.convertir_coordonnees(self._x, self._y)
         r = int(self._rayon * vue.scale)
 
-        import pygame
-        pygame.draw.circle(vue.screen, (0, 0, 0), (px, py), r)
+        pygame.draw.circle(vue.screen, (255, 0, 0), (px, py), r)

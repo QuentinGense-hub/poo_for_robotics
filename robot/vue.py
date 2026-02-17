@@ -28,7 +28,6 @@ class VuePygame:
         return px, py
 
     def dessiner_robot(self, robot):
-        self.screen.fill((255, 255, 255))
 
         x, y = self.convertir_coordonnees(robot.x, robot.y)
         r = int(robot.rayon * self.scale)
@@ -40,7 +39,7 @@ class VuePygame:
         x_dir = x + int(r * math.cos(robot.orientation))
         y_dir = y - int(r * math.sin(robot.orientation))
 
-        pygame.draw.line(self.screen, (255, 0, 0), (x, y), (x_dir, y_dir), 3)
+        pygame.draw.line(self.screen, (0, 0, 0), (x, y), (x_dir, y_dir), 3)
 
         pygame.display.flip()
 
@@ -53,6 +52,7 @@ class VuePygame:
 
         for obstacle in environnement.obstacles:
             obstacle.dessiner(self)
+            print("oui oui baguette")
 
         self.dessiner_robot(environnement.robot)
 
