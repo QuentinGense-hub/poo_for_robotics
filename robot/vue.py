@@ -52,7 +52,6 @@ class VuePygame:
 
         for obstacle in environnement.obstacles:
             obstacle.dessiner(self)
-            print("oui oui baguette")
 
         self.dessiner_robot(environnement.robot)
 
