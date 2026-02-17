@@ -1,24 +1,39 @@
-import math
+import pygame
 from robot.robot_mobile import RobotMobile
-from robot.moteur import MoteurDifferentiel, MoteurOmnidirectionnel
+from robot.moteur import MoteurDifferentiel
+from robot.controleur import ControleurClavierPygame
+from robot.vue import VuePygame
+from robot.environnement import Environnement
+from robot.obstacle import ObstacleCirculaire, ObstacleRectangulaire
 
-# moteur différentiel
-moteur = MoteurDifferentiel()
-robot = RobotMobile(moteur=moteur)
 
-dt = 1.0
+robot = RobotMobile(moteur=MoteurDifferentiel())
+env = Environnement(largeur=10, hauteur=8)
 
-robot.afficher()
-robot.commander(v=1.0, omega=math.pi / 4)
-robot.mettre_a_jour(dt)
-robot.afficher()
+env.ajouter_robot(robot)
 
-#moteur omnidirectionnel
-moteur2 = MoteurOmnidirectionnel()
-robot2 = RobotMobile(moteur=moteur2)
+env.ajouter_obstacle(ObstacleCirculaire(2, 2, 0.5))
+env.ajouter_obstacle(ObstacleCirculaire(-2, -1, 0.7))
+env.ajouter_obstacle(ObstacleRectangulaire(0, -2, 3, 1))
 
-robot2.commander(vx=1.0, vy=1.0, omega=0.0)
-robot2.mettre_a_jour(1.0)
-robot2.afficher()
+controleur = ControleurClavierPygame()
+vue = VuePygame()
 
-print("Nombre total de robots :", RobotMobile.nombre_robots())
+dt = 0.05
+running = True
+
+while running:
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    commande = controleur.lire_commande()
+    robot.commander(**commande)
+
+    env.mettre_a_jour(dt)
+
+    vue.dessiner_environnement(env)
+    vue.tick(60)
+
+pygame.quit()
