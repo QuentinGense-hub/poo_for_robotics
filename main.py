@@ -4,15 +4,17 @@ from robot.moteur import MoteurDifferentiel
 from robot.controleur import ControleurClavierPygame
 from robot.vue import VuePygame
 from robot.environnement import Environnement
-from robot.obstacle import ObstacleCirculaire
+from robot.obstacle import ObstacleCirculaire, ObstacleRectangulaire
 
 
 robot = RobotMobile(moteur=MoteurDifferentiel())
-env = Environnement()
+env = Environnement(largeur=10, hauteur=8)
 
 env.ajouter_robot(robot)
+
 env.ajouter_obstacle(ObstacleCirculaire(2, 2, 0.5))
 env.ajouter_obstacle(ObstacleCirculaire(-2, -1, 0.7))
+env.ajouter_obstacle(ObstacleRectangulaire(0, -2, 3, 1))
 
 controleur = ControleurClavierPygame()
 vue = VuePygame()
