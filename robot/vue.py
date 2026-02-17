@@ -46,3 +46,14 @@ class VuePygame:
 
     def tick(self, fps=60):
         self.clock.tick(fps)
+
+    def dessiner_environnement(self, environnement):
+
+        self.screen.fill((255, 255, 255))
+
+        for obstacle in environnement.obstacles:
+            obstacle.dessiner(self)
+
+        self.dessiner_robot(environnement.robot)
+
+        pygame.display.flip()
