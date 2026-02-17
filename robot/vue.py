@@ -39,7 +39,7 @@ class VuePygame:
         x_dir = x + int(r * math.cos(robot.orientation))
         y_dir = y - int(r * math.sin(robot.orientation))
 
-        pygame.draw.line(self.screen, (0, 0, 0), (x, y), (x_dir, y_dir), 3)
+        pygame.draw.line(self.screen, (255, 0, 0), (x, y), (x_dir, y_dir), 3)
 
         pygame.display.flip()
 
