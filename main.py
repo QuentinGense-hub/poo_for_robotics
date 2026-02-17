@@ -1,24 +1,21 @@
-import math
 from robot.robot_mobile import RobotMobile
-from robot.moteur import MoteurDifferentiel, MoteurOmnidirectionnel
+from robot.moteur import MoteurDifferentiel
+from robot.controleur import ControleurTerminal
+from robot.vue import VueTerminal
 
-# moteur différentiel
-moteur = MoteurDifferentiel()
-robot = RobotMobile(moteur=moteur)
+
+robot = RobotMobile(moteur=MoteurDifferentiel())
+controleur = ControleurTerminal()
+vue = VueTerminal()
 
 dt = 1.0
+running = True
 
-robot.afficher()
-robot.commander(v=1.0, omega=math.pi / 4)
-robot.mettre_a_jour(dt)
-robot.afficher()
+while running:
 
-#moteur omnidirectionnel
-moteur2 = MoteurOmnidirectionnel()
-robot2 = RobotMobile(moteur=moteur2)
+    vue.dessiner_robot(robot)
 
-robot2.commander(vx=1.0, vy=1.0, omega=0.0)
-robot2.mettre_a_jour(1.0)
-robot2.afficher()
+    commande = controleur.lire_commande()
 
-print("Nombre total de robots :", RobotMobile.nombre_robots())
+    robot.commander(**commande)
+    robot.mettre_a_jour(dt)
