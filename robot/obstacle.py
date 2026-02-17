@@ -51,7 +51,7 @@ class ObstacleRectangulaire(Obstacle):
         demi_h = self._hauteur / 2
 
         plus_proche_x = max(self._x - demi_l,
-                            min(robot.x, self._x + demil_l))
+                            min(robot.x, self._x + demi_l))
 
         plus_proche_y = max(self._y - demi_h,
                             min(robot.y, self._y + demi_h))
@@ -68,11 +68,7 @@ class ObstacleRectangulaire(Obstacle):
         largeur_px = int(self._largeur * vue.scale)
         hauteur_px = int(self._hauteur * vue.scale)
 
-        rect = pygame.Rect(
-            px - largeur_px // 2,
-            py - largeur_px // 2,
-            largeur_px,
-            hauteur_px
-        )
+        rect = pygame.Rect(0, 0, largeur_px, hauteur_px)
+        rect.center = (px, py)
 
         pygame.draw.rect(vue.screen, (50, 50, 50), rect)
