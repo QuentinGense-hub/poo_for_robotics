@@ -4,10 +4,11 @@ from robot.moteur import Moteur
 class RobotMobile:
     _nb_robots = 0 # attribut statique
 
-    def __init__(self, x=0.0, y=0.0, orientation=0.0, moteur=None):
+    def __init__(self, x=0.0, y=0.0, orientation=0.0, moteur=None, rayon=0.3):
         self.__x = x
         self.__y = y
         self.__orientation = orientation
+        self.__rayon = rayon
 
         if moteur is not None and not RobotMobile.moteur_valide(moteur):
             raise TypeError("Le moteur fourni n'est pas valide")
@@ -39,6 +40,10 @@ class RobotMobile:
     @orientation.setter
     def orientation(self, value):
         self.__orientation = value % (2 * math.pi)
+
+    @property
+    def rayon(self):
+        return self.__rayon
 
     #Méthodes de base
     def avancer(self, distance):
