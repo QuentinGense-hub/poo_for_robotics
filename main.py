@@ -5,16 +5,35 @@ from robot.controleur import ControleurClavierPygame
 from robot.vue import VuePygame
 from robot.environnement import Environnement
 from robot.obstacle import ObstacleCirculaire, ObstacleRectangulaire
+from robot.mur import Mur
+from robot.map_loader import creer_carte
 
+taille_case = 0.5
 
-robot = RobotMobile(moteur=MoteurDifferentiel())
+robot = RobotMobile(
+    x=1 * taille_case + taille_case / 2,
+    y=1 * taille_case + taille_case / 2,
+    moteur=MoteurDifferentiel())
 env = Environnement(largeur=10, hauteur=8)
 
 env.ajouter_robot(robot)
 
-env.ajouter_obstacle(ObstacleCirculaire(2, 2, 0.5))
-env.ajouter_obstacle(ObstacleCirculaire(-2, -1, 0.7))
-env.ajouter_obstacle(ObstacleRectangulaire(0, -2, 3, 1))
+PACMAN_MAP = [
+"#################",
+"#...............#",
+"#..###.###.###...#",
+"#..............#",
+"#..###.#.#.###...#",
+"#......#.#......#",
+"######.#.#.######",
+"#...............#",
+"#...###.###.###...#",
+"#...............#",
+"#...............#",
+"#################"
+]
+
+creer_carte(env, PACMAN_MAP, taille_case=0.5)
 
 controleur = ControleurClavierPygame()
 vue = VuePygame()
