@@ -33,11 +33,14 @@ class EntiteMobile:
 
     # Déplacement continu
     def deplacer(self, obstacles):
+        # Mouvement sur X
         prochain_x = self.x + self.vx
-        prochain_y = self.y + self.vy
-
-        if not self.collision(prochain_x, prochain_y, obstacles):
+        if not self.collision(prochain_x, self.y, obstacles):
             self.x = prochain_x
+
+        # Mouvement sur Y
+        prochain_y = self.y + self.vy
+        if not self.collision(self.x, prochain_y, obstacles):
             self.y = prochain_y
 
     # Rotation
