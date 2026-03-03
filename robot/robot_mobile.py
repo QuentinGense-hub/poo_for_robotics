@@ -2,13 +2,14 @@ import math
 from robot.moteur import Moteur
 
 class RobotMobile:
-    _nb_robots = 0 # attribut statique
+    _nb_robots = 0
 
-    def __init__(self, x=0.0, y=0.0, orientation=0.0, moteur=None, rayon=0.3):
-        self.__x = x
-        self.__y = y
-        self.__orientation = orientation
-        self.__rayon = rayon
+    def __init__(self, x=0.0, y=0.0, orientation=0.0, moteur: Moteur=None, rayon=0.3, nom="robot"):
+        self.__x = float(x)
+        self.__y = float(y)
+        self.__orientation = float(orientation)  # en radians
+        self.__rayon = float(rayon)
+        self.nom = nom
 
         if moteur is not None and not RobotMobile.moteur_valide(moteur):
             raise TypeError("Le moteur fourni n'est pas valide")
@@ -16,70 +17,59 @@ class RobotMobile:
         self.moteur = moteur
         RobotMobile._nb_robots += 1
 
-    #Encapsulation
+    # propriétés d'accès
     @property
     def x(self):
         return self.__x
 
     @x.setter
-    def x(self, value):
-        self.__x = float(value)
+    def x(self, v):
+        self.__x = float(v)
 
     @property
     def y(self):
         return self.__y
 
     @y.setter
-    def y(self, value):
-        self.__y = float(value)
+    def y(self, v):
+        self.__y = float(v)
 
     @property
     def orientation(self):
         return self.__orientation
 
     @orientation.setter
-    def orientation(self, value):
-        self.__orientation = value % (2 * math.pi)
+    def orientation(self, v):
+        self.__orientation = float(v)
 
     @property
     def rayon(self):
         return self.__rayon
 
-    #Méthodes de base
-    def avancer(self, distance):
-        self.__x += distance * math.cos(self.__orientation)
-        self.__y += distance * math.sin(self.__orientation)
-
-    def tourner(self, angle):
-        self.orientation += angle
-
-    def set_position(self, x, y):
-        self.__x = x
-        self.__y = y
-
-    #Polymorphisme par composition
-    def commander(self, **kwargs):
-        if self.moteur is not None:
-            self.moteur.commander(**kwargs)
+    def commander(self, *args, **kwargs):
+        """
+Déporte la commande vers le moteur
+Par ex. pour un moteur différentiel : commander(v, omega)
+        """
+        if self.moteur is None:
+            return
+        self.moteur.commander(*args, **kwargs)
 
     def mettre_a_jour(self, dt):
-        if self.moteur is not None:
+        """
+Appel du moteur pour appliquer la commande (modifie x,y,orientation)
+        """
+        if self.moteur:
             self.moteur.mettre_a_jour(self, dt)
 
-    #Affichage & méthodes spéciales
-    def afficher(self):
-        print(self)
-
     def __str__(self):
-        return f"(x={self.x:.2f}, y={self.y:.2f}, orientation={self.orientation:.2f})"
+        return f"{self.nom} (x={self.x:.2f}, y={self.y:.2f}, theta={self.orientation:.2f})"
 
-    #Méthodes statiques / de classe
     @classmethod
     def nombre_robots(cls):
         return cls._nb_robots
 
     @staticmethod
     def moteur_valide(moteur):
+        from robot.moteur import Moteur
         return isinstance(moteur, Moteur)
-
-    
