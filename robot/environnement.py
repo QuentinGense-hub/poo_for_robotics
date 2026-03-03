@@ -23,17 +23,15 @@ class Environnement:
         self.points.append((x, y))
 
     def limiter_positions(self, robot):
-        # empêche de sortir des limites du monde centré en (0,0)
-        demi_largeur = self.largeur / 2.0
-        demi_hauteur = self.hauteur / 2.0
-        if robot.x - robot.rayon < -demi_largeur:
-            robot.x = -demi_largeur + robot.rayon
-        if robot.x + robot.rayon > demi_largeur:
-            robot.x = demi_largeur - robot.rayon
-        if robot.y - robot.rayon < -demi_hauteur:
-            robot.y = -demi_hauteur + robot.rayon
-        if robot.y + robot.rayon > demi_hauteur:
-            robot.y = demi_hauteur - robot.rayon
+        if robot.x - robot.rayon < 0:
+            robot.x = robot.rayon
+        if robot.x + robot.rayon > self.largeur:
+            robot.x = self.largeur - robot.rayon
+
+        if robot.y - robot.rayon < 0:
+            robot.y = robot.rayon
+        if robot.y + robot.rayon > self.hauteur:
+            robot.y = self.hauteur - robot.rayon
 
     def collision_obstacles(self, robot):
         # parcours des obstacles, retourne True si collision détectée
@@ -50,15 +48,16 @@ class Environnement:
         # Mettre à jour le robot principal
         if self.robot:
             x_old, y_old, theta_old = self.robot.x, self.robot.y, self.robot.orientation
+            try:
+                self.robot.ia_simple(self)
+            except Exception:
+                pass
             self.robot.mettre_a_jour(dt)
             # si collision : revenir en arrière et stopper
             if self.collision_obstacles(self.robot):
-                self.robot.x, self.robot.y, self.robot.orientation = x_old, y_old, theta_old
-                # si moteur différentiel : couper la vitesse
-                try:
-                    self.robot.moteur.commander(0.0, 0.0)
-                except Exception:
-                    pass
+                # on annule seulement la position
+                self.robot.x, self.robot.y = x_old, y_old
+                # on garde la nouvelle orientation
             else:
                 # ramasser points uniquement si pas collision
                 try:
@@ -72,16 +71,11 @@ class Environnement:
             try:
                 # si pacman présent, appeler l'IA
                 if self.robot:
-                    g.ia_poursuite(self.robot, dt)
+                    g.ia_poursuite(self.robot, self)
             except Exception:
                 pass
             xg_old, yg_old, theg_old = g.x, g.y, g.orientation
             g.mettre_a_jour(dt)
             if self.collision_obstacles(g):
-                # simple réaction : revenir en arrière et arrêter
-                g.x, g.y, g.orientation = xg_old, yg_old, theg_old
-                try:
-                    g.moteur.commander(0.0, 0.0)
-                except Exception:
-                    pass
+                g.x, g.y = xg_old, yg_old
             self.limiter_positions(g)

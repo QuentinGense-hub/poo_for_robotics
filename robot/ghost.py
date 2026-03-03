@@ -11,24 +11,47 @@ class Ghost(RobotMobile):
         self.max_omega = max_omega
         self.nom = "Ghost"
 
-    def ia_poursuite(self, pacman, dt):
-        """
-Simple stratégie : viser l'angle vers Pacman, tourner proportionnellement,
-avancer proportionnellement à l'angle (plus l'angle est petit -> plus il avance).
-        """
-        dx = pacman.x - self.x
-        dy = pacman.y - self.y
-        cible_angle = math.atan2(dy, dx)
-        # plus petit écart angulaire dans [-pi, pi]
-        diff = (cible_angle - self.orientation + math.pi) % (2*math.pi) - math.pi
+    def ia_poursuite(self, pacman, env):
 
-        # paramètres simples
-        Kp_ang = 3.0  # gain proportionnel sur l'angle
-        omega_cmd = max(-self.max_omega, min(self.max_omega, Kp_ang * diff))
+        meilleur_angle = None
+        meilleur_score = float("inf")
 
-        # vitesse avant : réduite si l'angle est grand
-        # cos(diff) varie de -1 à 1 ; on garde que la partie positive
-        forward = self.max_speed * max(0.0, math.cos(diff))
+        # Échantillonnage angulaire autour de la direction actuelle
+        for delta in [i * 0.3 for i in range(-6, 7)]:
+            angle = self.orientation + delta
 
-        # commander le moteur (différentiel)
-        self.commander(forward, omega_cmd)
+            # Petit pas de simulation
+            test_x = self.x + 0.35 * math.cos(angle)
+            test_y = self.y + 0.35 * math.sin(angle)
+
+            # Sauvegarde position
+            old_x, old_y = self.x, self.y
+            self.x, self.y = test_x, test_y
+
+            collision = env.collision_obstacles(self)
+
+            # Restaurer
+            self.x, self.y = old_x, old_y
+
+            if collision:
+                continue
+
+            # Distance au pacman
+            score = (pacman.x - test_x)**2 + (pacman.y - test_y)**2
+
+            if score < meilleur_score:
+                meilleur_score = score
+                meilleur_angle = angle
+
+        # Si toutes directions bloquées → tourner sur place
+        if meilleur_angle is None:
+            self.commander(0, 2.5)
+            return
+
+        # Calcul rotation progressive
+        diff = (meilleur_angle - self.orientation + math.pi) % (2*math.pi) - math.pi
+
+        omega = 3.0 * diff
+        vitesse = self.max_speed * max(0.0, math.cos(diff))
+
+        self.commander(vitesse, omega)

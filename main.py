@@ -7,31 +7,43 @@ from robot.environnement import Environnement
 from robot.map_loader import creer_carte
 
 if __name__ == "__main__":
-    taille_case = 0.5
+    taille_case = 1.0
 
     # Exemple de grille simple : # murs ; . points ; space libre
     grille = [
-        "##########",
-        "#........#",
-        "#.####...#",
-        "#........#",
-        "##########"
+        "###############",
+        "#.............#",
+        "#.............#",
+        "#.....###.....#",
+        "#.............#",
+        "#.............#",
+        "###############"
     ]
 
-    env = Environnement(largeur=10*taille_case, hauteur=5*taille_case)
+    env = Environnement(
+        largeur=len(grille[0]) * taille_case,
+        hauteur=len(grille) * taille_case
+    )
     creer_carte(env, grille, taille_case=taille_case)
 
     # créer pacman
-    pac = Pacman(x=1*taille_case + taille_case/2, y=1*taille_case + taille_case/2,
-                 moteur=MoteurDifferentiel(v=0.0, omega=0.0, vmax=1.2, omegamax=4.0),
-                 rayon=0.2)
+    pac = Pacman(x=1.5, y=1.5,
+                 moteur=MoteurDifferentiel(v=0.0, omega=0.0, vmax=1.5, omegamax=4.0),
+                 rayon=0.25)
     env.ajouter_robot(pac)
 
     # créer un fantôme
-    ghost = Ghost(x=4*taille_case, y=3*taille_case, rayon=0.2)
+    ghost = Ghost(x=4.0, y=3.0, rayon=0.25)
     env.ajouter_ghost(ghost)
 
-    vue = VuePygame(800, 600, scale=80.0)
+    scale = 60
+
+    largeur_px = int(env.largeur * scale)
+    hauteur_px = int(env.hauteur * scale)
+
+    vue = VuePygame(largeur_px, hauteur_px)
+    vue.scale = scale
+    
     running = True
 
     while running:

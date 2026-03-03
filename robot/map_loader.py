@@ -7,11 +7,11 @@ def creer_carte(env, grille, taille_case=0.5):
     on positionne (0,0) en haut-left si tu veux, mais ici on place en coordonnées (x,y)
     """
     hauteur = len(grille)
-    largeur = max(len(l) for l in grille) if hauteur>0 else 0
+    largeur = len(grille[0])
     for j, ligne in enumerate(grille):
         for i, cellule in enumerate(ligne):
-            x = i * taille_case + taille_case / 2.0
-            y = j * taille_case + taille_case / 2.0
+            x = i * taille_case + taille_case/2
+            y = (len(grille) - j - 1) * taille_case + taille_case/2
             if cellule == "#":
                 mur = Mur(x, y, taille_case, taille_case)
                 env.ajouter_obstacle(mur)
