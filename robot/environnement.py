@@ -9,6 +9,8 @@ class Environnement:
         self.ghosts = []
         self.obstacles = []
         self.points = []  # liste de tuples (x,y) pour les dots
+        self.ghost_spawns = []
+        self.pacman_spawn = None
 
     def ajouter_robot(self, robot):
         self.robot = robot
@@ -79,3 +81,29 @@ class Environnement:
             if self.collision_obstacles(g):
                 g.x, g.y = xg_old, yg_old
             self.limiter_positions(g)
+
+    def ajouter_ghost_spawn(self, x, y):
+        """Ajoute une position de spawn (utile si on veut ajouter dynamiquement)."""
+        self.ghost_spawns.append((x, y))
+
+    def lister_ghost_spawns(self):
+        return list(self.ghost_spawns)
+
+    def spawn_ghosts(self, ghost_class=None, per_spawn=1):
+        """
+Instancie des Ghosts aux positions de spawn.
+ghost_class: la classe à instancier (par défaut Robot Ghost du module).
+per_spawn: combien de fantomes créer par spawn (1 par défaut).
+        """
+        if ghost_class is None:
+            from robot.ghost import Ghost as _Ghost
+            ghost_class = _Ghost
+
+        import math
+        for (x, y) in self.ghost_spawns:
+            for n in range(per_spawn):
+                # petits offsets si per_spawn > 1 pour les séparer légèrement
+                offx = (n - (per_spawn-1)/2) * 0.2 * 0.9
+                orientation = math.pi  # par défaut orientés vers la gauche
+                g = ghost_class(x + offx, y, orientation=orientation)
+                self.ajouter_ghost(g)

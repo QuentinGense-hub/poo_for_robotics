@@ -40,6 +40,19 @@ class VuePygame:
             eye_y = py - int(0.4 * r_px * math.sin(theta))
             pygame.draw.circle(self.screen, (0,0,0), (eye_x, eye_y), max(1, r_px//4))
 
+            # --- dessiner la "cuvette" / positions de spawn des ghosts si présentes
+        if hasattr(env, "ghost_spawns"):
+            for (gx, gy) in env.ghost_spawns:
+                px, py = self.convertir_coordonnees(gx, gy)
+                half = int(0.18 * self.scale)
+                rect = pygame.Rect(px-half, py-half, half*2, half*2)
+                # fond léger pour la cuvette
+                s = pygame.Surface((rect.w, rect.h), pygame.SRCALPHA)
+                s.fill((150, 150, 255, 80))  # bleu clair semi-transparent
+                self.screen.blit(s, (rect.x, rect.y))
+                # contour
+                pygame.draw.rect(self.screen, (100, 100, 200), rect, max(1, int(0.01*self.scale)))
+
         # ghosts
         for g in env.ghosts:
             px, py = self.convertir_coordonnees(g.x, g.y)
