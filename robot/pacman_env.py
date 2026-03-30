@@ -2,8 +2,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import math
-
-from types import SimpleNamespace
 from robot.environnement import Environnement
 from robot.pacman import Pacman
 from robot.map_loader import creer_carte
@@ -11,7 +9,10 @@ from gymnasium.envs.registration import register
 
 class PacmanEnv(gym.Env):
 
-    metadata = {"render_modes": ["human"], "render_fps": 30}
+    register(
+        id="PacmanPPO-v0",
+        entry_point="robot.pacman_env:PacmanEnv",
+    )
 
     def __init__(self):
         super().__init__()
@@ -27,7 +28,7 @@ class PacmanEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(18,),
+            shape=(10,),
             dtype=np.float32
         )
 
@@ -56,62 +57,21 @@ class PacmanEnv(gym.Env):
         self.cell_size = 1.0
         self.width = len(self.level_grid[0])
         self.height = len(self.level_grid)
+        self.max_dist = math.hypot(self.width, self.height)
+        self._move_step = 0.2
+        self._moves = (
+            (0.0, 0.0),
+            (0.0, self._move_step),
+            (0.0, -self._move_step),
+            (-self._move_step, 0.0),
+            (self._move_step, 0.0),
+        )
+        self._wall_grid = [
+            [cell == "#" for cell in row]
+            for row in self.level_grid
+        ]
 
         self._build_world()
-
-    def reset(self, seed=None, options=None):
-        super().reset(seed=seed)
-
-        self._build_world()
-        self.step_count = 0
-
-        observation = self._get_obs()
-        info = {}
-
-        return observation, info
-
-    def step(self, action):
-        self.step_count += 1
-
-        move = {
-            0: (0, 0),
-            1: (0, 0.2),
-            2: (0, -0.2),
-            3: (-0.2, 0),
-            4: (0.2, 0),
-        }
-
-        dx, dy = move[action]
-
-        old_x, old_y = self.pacman.x, self.pacman.y
-
-        self.pacman.x += dx
-        self.pacman.y += dy
-
-        # Collision murs
-        if self.env.collision_obstacles(self.pacman):
-            self.pacman.x, self.pacman.y = old_x, old_y
-            reward = -0.2
-        else:
-            reward = -0.01
-
-        # Ramassage points
-        collected = self.pacman.ramasser_points(self.env)
-        reward += collected * 1.0
-
-        terminated = False
-        truncated = False
-
-        if not self.env.points:
-            reward += 10
-            terminated = True
-
-        if self.step_count > 500:
-            truncated = True
-
-        observation = self._get_obs()
-
-        return observation, reward, terminated, truncated, {}
 
     def _build_world(self):
         self.env = Environnement(
@@ -133,16 +93,23 @@ class PacmanEnv(gym.Env):
         self.pacman.score = 0
         self.env.ajouter_robot(self.pacman)
 
-    def _get_obs(self):
-        pellet_one_hot, pellet_dx, pellet_dy, pellet_dist = self._best_pellet_direction()
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
 
+        self._build_world()
+        self.step_count = 0
+
+        observation = self._get_obs()
+        info = {}
+
+        return observation, info
+
+    def _get_obs(self):
         # Distances de rayons dans les 4 directions cardinales
         ray_up = self._ray_distance(0.0, 1.0)
         ray_right = self._ray_distance(1.0, 0.0)
         ray_down = self._ray_distance(0.0, -1.0)
         ray_left = self._ray_distance(-1.0, 0.0)
-
-        front_wall = self._front_is_wall()
 
         x_norm = self._norm01_to_m11(self.pacman.x / max(1e-6, self.width))
         y_norm = self._norm01_to_m11(self.pacman.y / max(1e-6, self.height))
@@ -165,14 +132,6 @@ class PacmanEnv(gym.Env):
             ray_right,
             ray_down,
             ray_left,
-            front_wall,
-            pellet_one_hot[0],
-            pellet_one_hot[1],
-            pellet_one_hot[2],
-            pellet_one_hot[3],
-            pellet_dx,
-            pellet_dy,
-            pellet_dist,
             remaining_norm,
             score_norm,
         ], dtype=np.float32)
@@ -183,8 +142,40 @@ class PacmanEnv(gym.Env):
         pass
 
     def _norm01_to_m11(self, value: float) -> float:
-        value = float(np.clip(value, 0.0, 1.0))
+        value = max(0.0, min(1.0, float(value)))
         return 2.0 * value - 1.0
+
+    def _cell_rect(self, row: int, col: int) -> tuple[float, float, float, float]:
+        x0 = col * self.cell_size
+        x1 = x0 + self.cell_size
+        y0 = (self.height - row - 1) * self.cell_size
+        y1 = y0 + self.cell_size
+        return x0, x1, y0, y1
+
+    def _circle_intersects_wall_cell(self, x: float, y: float, rayon: float, row: int, col: int) -> bool:
+        x0, x1, y0, y1 = self._cell_rect(row, col)
+        closest_x = min(max(x, x0), x1)
+        closest_y = min(max(y, y0), y1)
+        dx = x - closest_x
+        dy = y - closest_y
+        return dx * dx + dy * dy <= rayon * rayon
+
+    def _hits_wall(self, x: float, y: float, rayon: float | None = None) -> bool:
+        if rayon is None:
+            rayon = self.pacman.rayon
+
+        min_col = max(0, int((x - rayon) / self.cell_size))
+        max_col = min(self.width - 1, int((x + rayon) / self.cell_size))
+        min_row = max(0, self.height - 1 - int((y + rayon) / self.cell_size))
+        max_row = min(self.height - 1, self.height - 1 - int((y - rayon) / self.cell_size))
+
+        for row in range(min_row, max_row + 1):
+            wall_row = self._wall_grid[row]
+            for col in range(min_col, max_col + 1):
+                if wall_row[col] and self._circle_intersects_wall_cell(x, y, rayon, row, col):
+                    return True
+
+        return False
 
     def _normalize_delta(self, dx: float, dy: float) -> tuple[float, float]:
         return dx / max(1e-6, self.width), dy / max(1e-6, self.height)
@@ -225,10 +216,9 @@ class PacmanEnv(gym.Env):
     ou sortir de la carte.
     Retourne une valeur normalisée dans [-1, 1].
         """
-        max_dist = math.hypot(self.width, self.height)
         dist = 0.0
 
-        while dist < max_dist:
+        while dist < self.max_dist:
             dist += step
             x = self.pacman.x + dx * dist
             y = self.pacman.y + dy * dist
@@ -237,16 +227,10 @@ class PacmanEnv(gym.Env):
             if x < 0 or x > self.width or y < 0 or y > self.height:
                 break
 
-            probe = SimpleNamespace(
-                x=x,
-                y=y,
-                rayon=getattr(self.pacman, "rayon", 0.25),
-            )
-
-            if self.env.collision_obstacles(probe):
+            if self._hits_wall(x, y):
                 break
 
-        return self._norm01_to_m11(dist / max_dist)
+        return self._norm01_to_m11(dist / self.max_dist)
 
     def _front_is_wall(self) -> float:
         """
@@ -265,19 +249,13 @@ class PacmanEnv(gym.Env):
             dy = 1.0 if s >= 0 else -1.0
 
         # On regarde à une petite distance devant
-        forward_x = self.pacman.x + dx * getattr(self, "_move_step", 0.2)
-        forward_y = self.pacman.y + dy * getattr(self, "_move_step", 0.2)
-
-        probe = SimpleNamespace(
-            x=forward_x,
-            y=forward_y,
-            rayon=getattr(self.pacman, "rayon", 0.25),
-        )
+        forward_x = self.pacman.x + dx * self._move_step
+        forward_y = self.pacman.y + dy * self._move_step
 
         hit = (
             forward_x < 0 or forward_x > self.width or
             forward_y < 0 or forward_y > self.height or
-            self.env.collision_obstacles(probe)
+            self._hits_wall(forward_x, forward_y)
         )
 
         return 1.0 if hit else -1.0
@@ -306,8 +284,7 @@ class PacmanEnv(gym.Env):
             one_hot[0 if dy > 0 else 2] = 1.0
 
         ndx, ndy = self._normalize_delta(dx, dy)
-        max_dist = math.hypot(self.width, self.height)
-        ndist = self._norm01_to_m11(dist / max_dist)
+        ndist = self._norm01_to_m11(dist / self.max_dist)
 
         return one_hot, ndx, ndy, ndist
 
@@ -318,7 +295,36 @@ class PacmanEnv(gym.Env):
         top = max(0.0, self.height - self.pacman.y)
         return left, right, bottom, top
 
-    register(
-        id="PacmanPPO-v0",
-        entry_point="robot.pacman_env:PacmanEnv",
-    )
+    def step(self, action):
+        self.step_count += 1
+        dx, dy = self._moves[action]
+
+        old_x, old_y = self.pacman.x, self.pacman.y
+
+        self.pacman.x += dx
+        self.pacman.y += dy
+
+        # Collision murs
+        if self._hits_wall(self.pacman.x, self.pacman.y, self.pacman.rayon):
+            self.pacman.x, self.pacman.y = old_x, old_y
+            reward = -0.2
+        else:
+            reward = -0.01
+
+        # Ramassage points
+        collected = self.pacman.ramasser_points(self.env)
+        reward += collected * 1.0
+
+        terminated = False
+        truncated = False
+
+        if not self.env.points:
+            reward += 10
+            terminated = True
+
+        if self.step_count > 500:
+            truncated = True
+
+        observation = self._get_obs()
+
+        return observation, reward, terminated, truncated, {}
