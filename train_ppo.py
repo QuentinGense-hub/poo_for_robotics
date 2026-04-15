@@ -44,7 +44,7 @@ def plot_training_loss(progress_csv: Path, output_path: Path) -> None:
         print("Aucune valeur de loss n'a ete trouvee dans progress.csv.")
         return
 
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(18, 5))
     plt.plot(timesteps, losses, color="tab:blue", linewidth=2)
     plt.title("Courbe de loss PPO")
     plt.xlabel("Timesteps")

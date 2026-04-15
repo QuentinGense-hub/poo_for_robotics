@@ -26,6 +26,14 @@ def main():
     model = PPO.load(model_path)
     rl_env = PacmanEnv()
     observation, _ = rl_env.reset()
+    expected_obs_shape = model.observation_space.shape
+    current_obs_shape = rl_env.observation_space.shape
+    if expected_obs_shape != current_obs_shape:
+        raise ValueError(
+            "Le modele charge n'utilise pas la meme observation que PacmanEnv. "
+            f"Modele: {expected_obs_shape}, env: {current_obs_shape}. "
+            "Relance train_ppo.py pour reentrainer le PPO."
+        )
     rl_env.pacman.display_orientation = 0.0
 
     scale = 40

@@ -8,6 +8,12 @@ from robot.map_loader import creer_carte
 from gymnasium.envs.registration import register
 
 class PacmanEnv(gym.Env):
+    _ACTION_TO_ORIENTATION = {
+        1: math.pi / 2,
+        2: -math.pi / 2,
+        3: math.pi,
+        4: 0.0,
+    }
 
     register(
         id="PacmanPPO-v0",
@@ -28,7 +34,7 @@ class PacmanEnv(gym.Env):
         self.observation_space = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(10,),
+            shape=(18,),
             dtype=np.float32
         )
 
@@ -98,6 +104,7 @@ class PacmanEnv(gym.Env):
 
         self._build_world()
         self.step_count = 0
+        self._last_action = 0
 
         observation = self._get_obs()
         info = {}
@@ -105,11 +112,14 @@ class PacmanEnv(gym.Env):
         return observation, info
 
     def _get_obs(self):
+        pellet_one_hot, pellet_dx, pellet_dy, pellet_dist = self._best_pellet_direction()
+
         # Distances de rayons dans les 4 directions cardinales
         ray_up = self._ray_distance(0.0, 1.0)
         ray_right = self._ray_distance(1.0, 0.0)
         ray_down = self._ray_distance(0.0, -1.0)
         ray_left = self._ray_distance(-1.0, 0.0)
+        front_wall = self._front_is_wall()
 
         x_norm = self._norm01_to_m11(self.pacman.x / max(1e-6, self.width))
         y_norm = self._norm01_to_m11(self.pacman.y / max(1e-6, self.height))
@@ -132,6 +142,14 @@ class PacmanEnv(gym.Env):
             ray_right,
             ray_down,
             ray_left,
+            front_wall,
+            pellet_one_hot[0],
+            pellet_one_hot[1],
+            pellet_one_hot[2],
+            pellet_one_hot[3],
+            pellet_dx,
+            pellet_dy,
+            pellet_dist,
             remaining_norm,
             score_norm,
         ], dtype=np.float32)
@@ -295,9 +313,22 @@ class PacmanEnv(gym.Env):
         top = max(0.0, self.height - self.pacman.y)
         return left, right, bottom, top
 
+    def _is_reverse_action(self, current_action: int) -> bool:
+        opposite_actions = {
+            1: 2,
+            2: 1,
+            3: 4,
+            4: 3,
+        }
+        return opposite_actions.get(current_action) == self._last_action
+
     def step(self, action):
         self.step_count += 1
         dx, dy = self._moves[action]
+        pellet_before, dist_before = self._nearest_pellet()
+
+        if action in self._ACTION_TO_ORIENTATION:
+            self.pacman.orientation = self._ACTION_TO_ORIENTATION[action]
 
         old_x, old_y = self.pacman.x, self.pacman.y
 
@@ -307,13 +338,23 @@ class PacmanEnv(gym.Env):
         # Collision murs
         if self._hits_wall(self.pacman.x, self.pacman.y, self.pacman.rayon):
             self.pacman.x, self.pacman.y = old_x, old_y
-            reward = -0.2
+            reward = -0.35
         else:
-            reward = -0.01
+            reward = -0.02
+
+        if action == 0:
+            reward -= 0.02
+
+        if self._is_reverse_action(action):
+            reward -= 0.04
 
         # Ramassage points
         collected = self.pacman.ramasser_points(self.env)
         reward += collected * 1.0
+
+        _, dist_after = self._nearest_pellet()
+        if math.isfinite(dist_before) and math.isfinite(dist_after):
+            reward += 0.15 * (dist_before - dist_after)
 
         terminated = False
         truncated = False
@@ -325,6 +366,7 @@ class PacmanEnv(gym.Env):
         if self.step_count > 500:
             truncated = True
 
+        self._last_action = action
         observation = self._get_obs()
 
         return observation, reward, terminated, truncated, {}
