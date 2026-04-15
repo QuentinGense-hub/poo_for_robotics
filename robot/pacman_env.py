@@ -1,41 +1,42 @@
-import gymnasium as gym
-from gymnasium import spaces
-import numpy as np
 import math
-from robot.environnement import Environnement
-from robot.pacman import Pacman
-from robot.map_loader import creer_carte
+
+import gymnasium as gym
+import numpy as np
+from gymnasium import spaces
 from gymnasium.envs.registration import register
 
-class PacmanEnv(gym.Env):
-    _ACTION_TO_ORIENTATION = {
-        1: math.pi / 2,
-        2: -math.pi / 2,
-        3: math.pi,
-        4: 0.0,
-    }
+from robot.environnement import Environnement
+from robot.map_loader import creer_carte
+from robot.moteur import MoteurOmnidirectionnel
+from robot.pacman import Pacman
 
+
+class PacmanEnv(gym.Env):
     register(
         id="PacmanPPO-v0",
         entry_point="robot.pacman_env:PacmanEnv",
     )
 
-    def __init__(self):
+    def __init__(self, max_steps: int | None = 500):
         super().__init__()
+        self.max_steps = max_steps
 
-        # 0: stay
-        # 1: up
-        # 2: down
-        # 3: left
-        # 4: right
-        self.action_space = spaces.Discrete(5)
+        # Commande continue d'un robot omnidirectionnel:
+        # [vx, vy, omega] normalises dans [-1, 1].
+        self.action_space = spaces.Box(
+            low=-1.0,
+            high=1.0,
+            shape=(3,),
+            dtype=np.float32,
+        )
 
-        # On commencera simple : position x,y + score
+        # 8 rayons lidar + x, y + cos/sin(theta) + cible proche dans le repere robot
+        # + distance cible + progression de collecte + score.
         self.observation_space = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(18,),
-            dtype=np.float32
+            shape=(17,),
+            dtype=np.float32,
         )
 
         self.level_grid = [
@@ -57,104 +58,48 @@ class PacmanEnv(gym.Env):
             "#......##....##....##......#",
             "#......##....##....##......#",
             "#..........................#",
-            "############################"
+            "############################",
         ]
 
         self.cell_size = 1.0
         self.width = len(self.level_grid[0])
         self.height = len(self.level_grid)
         self.max_dist = math.hypot(self.width, self.height)
-        self._move_step = 0.2
-        self._moves = (
-            (0.0, 0.0),
-            (0.0, self._move_step),
-            (0.0, -self._move_step),
-            (-self._move_step, 0.0),
-            (self._move_step, 0.0),
-        )
-        self._wall_grid = [
-            [cell == "#" for cell in row]
-            for row in self.level_grid
-        ]
+
+        self.dt = 0.2
+        self.max_linear_speed = 2.0
+        self.max_angular_speed = 2.5
+        self._ray_step = 0.2
+        self._lidar_angles = tuple(i * (math.pi / 4.0) for i in range(8))
+
+        self._wall_grid = [[cell == "#" for cell in row] for row in self.level_grid]
 
         self._build_world()
 
-    def _build_world(self):
-        self.env = Environnement(
-            largeur=self.width,
-            hauteur=self.height
-        )
-
+    def _build_world(self) -> None:
+        self.env = Environnement(largeur=self.width, hauteur=self.height)
         creer_carte(self.env, self.level_grid, taille_case=self.cell_size)
 
         px, py = self.env.pacman_spawn
-
+        moteur = MoteurOmnidirectionnel(vx=0.0, vy=0.0, omega=0.0)
         self.pacman = Pacman(
             x=px,
             y=py,
-            moteur=None,
-            rayon=0.25
+            orientation=0.0,
+            moteur=moteur,
+            rayon=0.25,
         )
-
         self.pacman.score = 0
         self.env.ajouter_robot(self.pacman)
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-
         self._build_world()
         self.step_count = 0
-        self._last_action = 0
+        self._stagnant_steps = 0
+        self._last_position = (self.pacman.x, self.pacman.y)
 
-        observation = self._get_obs()
-        info = {}
-
-        return observation, info
-
-    def _get_obs(self):
-        pellet_one_hot, pellet_dx, pellet_dy, pellet_dist = self._best_pellet_direction()
-
-        # Distances de rayons dans les 4 directions cardinales
-        ray_up = self._ray_distance(0.0, 1.0)
-        ray_right = self._ray_distance(1.0, 0.0)
-        ray_down = self._ray_distance(0.0, -1.0)
-        ray_left = self._ray_distance(-1.0, 0.0)
-        front_wall = self._front_is_wall()
-
-        x_norm = self._norm01_to_m11(self.pacman.x / max(1e-6, self.width))
-        y_norm = self._norm01_to_m11(self.pacman.y / max(1e-6, self.height))
-
-        theta = getattr(self.pacman, "orientation", 0.0)
-        cos_t = math.cos(theta)
-        sin_t = math.sin(theta)
-
-        remaining_frac = len(self.env.points) / max(1, self.width * self.height)
-        remaining_norm = self._norm01_to_m11(remaining_frac)
-
-        score_norm = self._norm01_to_m11(self.pacman.score / 100.0)
-
-        obs = np.array([
-            x_norm,
-            y_norm,
-            cos_t,
-            sin_t,
-            ray_up,
-            ray_right,
-            ray_down,
-            ray_left,
-            front_wall,
-            pellet_one_hot[0],
-            pellet_one_hot[1],
-            pellet_one_hot[2],
-            pellet_one_hot[3],
-            pellet_dx,
-            pellet_dy,
-            pellet_dist,
-            remaining_norm,
-            score_norm,
-        ], dtype=np.float32)
-
-        return obs
+        return self._get_obs(), {}
 
     def render(self):
         pass
@@ -195,178 +140,149 @@ class PacmanEnv(gym.Env):
 
         return False
 
-    def _normalize_delta(self, dx: float, dy: float) -> tuple[float, float]:
-        return dx / max(1e-6, self.width), dy / max(1e-6, self.height)
-
     def _nearest_pellet(self):
         if not self.env.points:
             return None, float("inf")
 
         best = None
         best_dist = float("inf")
-
         for x, y in self.env.points:
-            d = math.dist((self.pacman.x, self.pacman.y), (x, y))
-            if d < best_dist:
+            dist = math.dist((self.pacman.x, self.pacman.y), (x, y))
+            if dist < best_dist:
                 best = (x, y)
-                best_dist = d
-
+                best_dist = dist
         return best, best_dist
 
-    def _nearest_ghost(self):
-        if not hasattr(self.env, "ghosts") or not self.env.ghosts:
-            return None, float("inf")
+    def _world_to_robot_frame(self, dx: float, dy: float) -> tuple[float, float]:
+        theta = self.pacman.orientation
+        forward = dx * math.cos(theta) + dy * math.sin(theta)
+        lateral = -dx * math.sin(theta) + dy * math.cos(theta)
+        return forward, lateral
 
-        best = None
-        best_dist = float("inf")
-
-        for g in self.env.ghosts:
-            d = math.dist((self.pacman.x, self.pacman.y), (g.x, g.y))
-            if d < best_dist:
-                best = (g.x, g.y)
-                best_dist = d
-
-        return best, best_dist
-
-    def _ray_distance(self, dx: float, dy: float, step: float = 0.10) -> float:
-        """
-    Raycast simple: on avance petit à petit jusqu'à toucher un mur
-    ou sortir de la carte.
-    Retourne une valeur normalisée dans [-1, 1].
-        """
+    def _ray_distance(self, angle_offset: float) -> float:
+        angle = self.pacman.orientation + angle_offset
+        dx = math.cos(angle)
+        dy = math.sin(angle)
         dist = 0.0
 
         while dist < self.max_dist:
-            dist += step
+            dist += self._ray_step
             x = self.pacman.x + dx * dist
             y = self.pacman.y + dy * dist
 
-            # Hors carte
             if x < 0 or x > self.width or y < 0 or y > self.height:
                 break
-
             if self._hits_wall(x, y):
                 break
 
         return self._norm01_to_m11(dist / self.max_dist)
 
-    def _front_is_wall(self) -> float:
-        """
-    1.0 si un mur est juste devant, -1.0 sinon.
-    On prend la direction dominante de l'orientation actuelle.
-        """
-        theta = getattr(self.pacman, "orientation", 0.0)
-        c = math.cos(theta)
-        s = math.sin(theta)
+    def _lidar_scan(self) -> list[float]:
+        return [self._ray_distance(angle) for angle in self._lidar_angles]
 
-        if abs(c) >= abs(s):
-            dx = 1.0 if c >= 0 else -1.0
-            dy = 0.0
-        else:
-            dx = 0.0
-            dy = 1.0 if s >= 0 else -1.0
+    def _get_obs(self):
+        lidar_scan = self._lidar_scan()
+        x_norm = self._norm01_to_m11(self.pacman.x / max(1e-6, self.width))
+        y_norm = self._norm01_to_m11(self.pacman.y / max(1e-6, self.height))
+        cos_t = math.cos(self.pacman.orientation)
+        sin_t = math.sin(self.pacman.orientation)
 
-        # On regarde à une petite distance devant
-        forward_x = self.pacman.x + dx * self._move_step
-        forward_y = self.pacman.y + dy * self._move_step
-
-        hit = (
-            forward_x < 0 or forward_x > self.width or
-            forward_y < 0 or forward_y > self.height or
-            self._hits_wall(forward_x, forward_y)
-        )
-
-        return 1.0 if hit else -1.0
-
-    def _best_pellet_direction(self):
-        """
-    Direction optimale vers la pastille la plus proche.
-    Retourne :
-    - one-hot de la meilleure action (up, right, down, left)
-    - dx, dy normalisés vers la pastille
-    - distance normalisée vers la pastille
-        """
-        pellet, dist = self._nearest_pellet()
-
+        pellet, pellet_dist = self._nearest_pellet()
         if pellet is None:
-            return [0.0, 0.0, 0.0, 0.0], 0.0, 0.0, 1.0
-
-        dx = pellet[0] - self.pacman.x
-        dy = pellet[1] - self.pacman.y
-
-        # Choix cardinal simple : axe dominant
-        one_hot = [0.0, 0.0, 0.0, 0.0]  # up, right, down, left
-        if abs(dx) >= abs(dy):
-            one_hot[1 if dx > 0 else 3] = 1.0
+            pellet_forward = 0.0
+            pellet_lateral = 0.0
+            pellet_dist_norm = 1.0
         else:
-            one_hot[0 if dy > 0 else 2] = 1.0
+            dx = pellet[0] - self.pacman.x
+            dy = pellet[1] - self.pacman.y
+            forward, lateral = self._world_to_robot_frame(dx, dy)
+            pellet_forward = forward / max(1e-6, self.width)
+            pellet_lateral = lateral / max(1e-6, self.height)
+            pellet_dist_norm = self._norm01_to_m11(pellet_dist / self.max_dist)
 
-        ndx, ndy = self._normalize_delta(dx, dy)
-        ndist = self._norm01_to_m11(dist / self.max_dist)
+        remaining_frac = len(self.env.points) / max(1, self.width * self.height)
+        remaining_norm = self._norm01_to_m11(remaining_frac)
+        score_norm = self._norm01_to_m11(self.pacman.score / 100.0)
 
-        return one_hot, ndx, ndy, ndist
-
-    def _wall_clearances(self):
-        left = max(0.0, self.pacman.x)
-        right = max(0.0, self.width - self.pacman.x)
-        bottom = max(0.0, self.pacman.y)
-        top = max(0.0, self.height - self.pacman.y)
-        return left, right, bottom, top
-
-    def _is_reverse_action(self, current_action: int) -> bool:
-        opposite_actions = {
-            1: 2,
-            2: 1,
-            3: 4,
-            4: 3,
-        }
-        return opposite_actions.get(current_action) == self._last_action
+        return np.array(
+            [
+                *lidar_scan,
+                x_norm,
+                y_norm,
+                cos_t,
+                sin_t,
+                pellet_forward,
+                pellet_lateral,
+                pellet_dist_norm,
+                remaining_norm,
+                score_norm,
+            ],
+            dtype=np.float32,
+        )
 
     def step(self, action):
         self.step_count += 1
-        dx, dy = self._moves[action]
-        pellet_before, dist_before = self._nearest_pellet()
 
-        if action in self._ACTION_TO_ORIENTATION:
-            self.pacman.orientation = self._ACTION_TO_ORIENTATION[action]
+        action = np.asarray(action, dtype=np.float32).reshape(3)
+        action = np.clip(action, -1.0, 1.0)
 
-        old_x, old_y = self.pacman.x, self.pacman.y
+        dist_before = self._nearest_pellet()[1]
+        old_x = self.pacman.x
+        old_y = self.pacman.y
 
-        self.pacman.x += dx
-        self.pacman.y += dy
+        vx_cmd = float(action[0]) * self.max_linear_speed
+        vy_cmd = float(action[1]) * self.max_linear_speed
+        omega_cmd = float(action[2]) * self.max_angular_speed
 
-        # Collision murs
+        self.pacman.commander(vx_cmd, vy_cmd, omega_cmd)
+        self.pacman.mettre_a_jour(self.dt)
+
+        reward = -0.01
+
         if self._hits_wall(self.pacman.x, self.pacman.y, self.pacman.rayon):
-            self.pacman.x, self.pacman.y = old_x, old_y
-            reward = -0.35
+            self.pacman.x = old_x
+            self.pacman.y = old_y
+            # On garde la rotation, mais on annule une orientation devenue numeriquement trop large.
+            self.pacman.orientation = ((self.pacman.orientation + math.pi) % (2 * math.pi)) - math.pi
+            reward -= 0.25
         else:
-            reward = -0.02
+            movement = math.dist((old_x, old_y), (self.pacman.x, self.pacman.y))
+            if movement < 0.02:
+                reward -= 0.03
 
-        if action == 0:
-            reward -= 0.02
+        self.env.limiter_positions(self.pacman)
 
-        if self._is_reverse_action(action):
-            reward -= 0.04
-
-        # Ramassage points
         collected = self.pacman.ramasser_points(self.env)
         reward += collected * 1.0
 
-        _, dist_after = self._nearest_pellet()
+        dist_after = self._nearest_pellet()[1]
         if math.isfinite(dist_before) and math.isfinite(dist_after):
-            reward += 0.15 * (dist_before - dist_after)
+            reward += 0.1 * (dist_before - dist_after)
+
+        current_position = (self.pacman.x, self.pacman.y)
+        if math.dist(current_position, self._last_position) < 0.02:
+            self._stagnant_steps += 1
+        else:
+            self._stagnant_steps = 0
+        self._last_position = current_position
+
+        if self._stagnant_steps >= 8:
+            reward -= 0.08
 
         terminated = False
         truncated = False
 
         if not self.env.points:
-            reward += 10
+            reward += 10.0
             terminated = True
 
-        if self.step_count > 500:
+        if self.max_steps is not None and self.step_count >= self.max_steps:
             truncated = True
 
-        self._last_action = action
-        observation = self._get_obs()
-
-        return observation, reward, terminated, truncated, {}
+        info = {
+            "vx_cmd": vx_cmd,
+            "vy_cmd": vy_cmd,
+            "omega_cmd": omega_cmd,
+            "collision": self._hits_wall(self.pacman.x, self.pacman.y, self.pacman.rayon),
+        }
+        return self._get_obs(), reward, terminated, truncated, info
