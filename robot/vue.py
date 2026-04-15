@@ -33,7 +33,7 @@ class VuePygame:
             px, py = self.convertir_coordonnees(env.robot.x, env.robot.y)
             r_px = max(4, int(env.robot.rayon * self.scale))
             # bouche simple pour indiquer orientation
-            theta = env.robot.orientation
+            theta = getattr(env.robot, "display_orientation", env.robot.orientation)
             pygame.draw.circle(self.screen, (255, 255, 0), (px, py), r_px)
             # œil
             eye_x = px + int(0.4 * r_px * math.cos(theta))

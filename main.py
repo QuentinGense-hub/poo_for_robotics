@@ -1,91 +1,75 @@
+from pathlib import Path
+import math
+
 import pygame
-from robot.pacman import Pacman
-from robot.ghost import Ghost
-from robot.moteur import MoteurDifferentiel
+from stable_baselines3 import PPO
+
+from robot.pacman_env import PacmanEnv
 from robot.vue import VuePygame
-from robot.environnement import Environnement
-from robot.map_loader import creer_carte
 
-if __name__ == "__main__":
-    taille_case = 1.0
 
-    # Exemple de grille simple : # murs ; . points ; space libre
-    grille = [
-        "############################",
-        "#............##............#",
-        "#.#........#.##.#........#.#",
-        "#.#........#.##.#........#.#",
-        "#.####..####.##.####..####.#",
-        "#............P.............#",
-        "#......##..######..##......#",
-        "#......##....##....##......#",
-        "####...##... ## ...##...####",
-        "   #...#    GGGG    #...#   ",
-        "####...#  ########  #...####",
-        "#............##............#",
-        "#............##............#",
-        "#...##................##...#",
-        "###.##.##.########.##.##.###",
-        "#......##....##....##......#",
-        "#......##....##....##......#",
-        "#..........................#",
-        "############################"
-    ]
+DISPLAY_ORIENTATIONS = {
+    1: math.pi / 2,
+    2: -math.pi / 2,
+    3: math.pi,
+    4: 0.0,
+}
 
-    env = Environnement(
-        largeur=len(grille[0]) * taille_case,
-        hauteur=len(grille) * taille_case
-    )
-    creer_carte(env, grille, taille_case=taille_case)
 
-    # créer pacman
-    px, py = env.pacman_spawn
-    pac = Pacman(x=px, y=py,
-                 moteur=MoteurDifferentiel(v=0.0, omega=0.0, vmax=1.5, omegamax=4.0),
-                 rayon=0.25)
-    env.ajouter_robot(pac)
+def main():
+    model_path = Path(__file__).with_name("ppo_pacman.zip")
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"Modele introuvable: {model_path}. Lance d'abord l'entrainement PPO."
+        )
 
-    # créer un fantôme
-    env.spawn_ghosts()
+    model = PPO.load(model_path)
+    rl_env = PacmanEnv()
+    observation, _ = rl_env.reset()
+    expected_obs_shape = model.observation_space.shape
+    current_obs_shape = rl_env.observation_space.shape
+    if expected_obs_shape != current_obs_shape:
+        raise ValueError(
+            "Le modele charge n'utilise pas la meme observation que PacmanEnv. "
+            f"Modele: {expected_obs_shape}, env: {current_obs_shape}. "
+            "Relance train_ppo.py pour reentrainer le PPO."
+        )
+    rl_env.pacman.display_orientation = 0.0
 
     scale = 40
-
-    largeur_px = int(env.largeur * scale)
-    hauteur_px = int(env.hauteur * scale)
-
-    vue = VuePygame(largeur_px, hauteur_px)
+    vue = VuePygame(
+        int(rl_env.width * scale),
+        int(rl_env.height * scale),
+    )
     vue.scale = scale
-    
+
     running = True
+    fps = 15
 
     while running:
-        dt = vue.clock.tick(60) / 1000.0  # dt en secondes
+        vue.clock.tick(fps)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-        # commandes clavier pour Pacman (W/S forward/back, A/D tourner)
-        keys = pygame.key.get_pressed()
-        v_cmd = 0.0
-        omega_cmd = 0.0
-        speed = 1.0
-        omega_speed = 3.0
-        if keys[pygame.K_w]:
-            v_cmd += speed
-        if keys[pygame.K_s]:
-            v_cmd -= speed
-        if keys[pygame.K_a]:
-            omega_cmd += omega_speed
-        if keys[pygame.K_d]:
-            omega_cmd -= omega_speed
+        action, _ = model.predict(observation, deterministic=True)
+        observation, reward, terminated, truncated, _ = rl_env.step(int(action))
+        if int(action) in DISPLAY_ORIENTATIONS:
+            rl_env.pacman.display_orientation = DISPLAY_ORIENTATIONS[int(action)]
 
-        pac.commander(v_cmd, omega_cmd)
+        vue.dessiner_environnement(rl_env.env)
 
-        env.mettre_a_jour(dt)
-        vue.dessiner_environnement(env)
+        pygame.display.set_caption(
+            f"Modele PPO | Score: {rl_env.pacman.score} | dots: {len(rl_env.env.points)}"
+        )
 
-        # petite info console
-        pygame.display.set_caption(f"Score: {pac.score}  dots remaining: {len(env.points)}")
+        if terminated or truncated:
+            observation, _ = rl_env.reset()
+            rl_env.pacman.display_orientation = 0.0
 
     pygame.quit()
+
+
+if __name__ == "__main__":
+    main()
