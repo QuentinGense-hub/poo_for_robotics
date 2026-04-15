@@ -1,19 +1,10 @@
 from pathlib import Path
-import math
 
 import pygame
 from stable_baselines3 import PPO
 
 from robot.pacman_env import PacmanEnv
 from robot.vue import VuePygame
-
-
-DISPLAY_ORIENTATIONS = {
-    1: math.pi / 2,
-    2: -math.pi / 2,
-    3: math.pi,
-    4: 0.0,
-}
 
 
 def main():
@@ -24,17 +15,22 @@ def main():
         )
 
     model = PPO.load(model_path)
-    rl_env = PacmanEnv()
+    rl_env = PacmanEnv(max_steps=None)
     observation, _ = rl_env.reset()
-    expected_obs_shape = model.observation_space.shape
-    current_obs_shape = rl_env.observation_space.shape
-    if expected_obs_shape != current_obs_shape:
+
+    if model.observation_space.shape != rl_env.observation_space.shape:
         raise ValueError(
             "Le modele charge n'utilise pas la meme observation que PacmanEnv. "
-            f"Modele: {expected_obs_shape}, env: {current_obs_shape}. "
+            f"Modele: {model.observation_space.shape}, env: {rl_env.observation_space.shape}. "
             "Relance train_ppo.py pour reentrainer le PPO."
         )
-    rl_env.pacman.display_orientation = 0.0
+
+    if model.action_space.shape != rl_env.action_space.shape:
+        raise ValueError(
+            "Le modele charge n'utilise pas la meme action que PacmanEnv. "
+            f"Modele: {model.action_space.shape}, env: {rl_env.action_space.shape}. "
+            "Relance train_ppo.py pour reentrainer le PPO."
+        )
 
     scale = 40
     vue = VuePygame(
@@ -44,7 +40,7 @@ def main():
     vue.scale = scale
 
     running = True
-    fps = 15
+    fps = 20
 
     while running:
         vue.clock.tick(fps)
@@ -54,19 +50,19 @@ def main():
                 running = False
 
         action, _ = model.predict(observation, deterministic=True)
-        observation, reward, terminated, truncated, _ = rl_env.step(int(action))
-        if int(action) in DISPLAY_ORIENTATIONS:
-            rl_env.pacman.display_orientation = DISPLAY_ORIENTATIONS[int(action)]
+        observation, reward, terminated, truncated, info = rl_env.step(action)
+        rl_env.pacman.display_orientation = rl_env.pacman.orientation
 
         vue.dessiner_environnement(rl_env.env)
-
         pygame.display.set_caption(
-            f"Modele PPO | Score: {rl_env.pacman.score} | dots: {len(rl_env.env.points)}"
+            "Modele PPO omni | "
+            f"Score: {rl_env.pacman.score} | dots: {len(rl_env.env.points)} | "
+            f"vx={info['vx_cmd']:.2f} vy={info['vy_cmd']:.2f} w={info['omega_cmd']:.2f}"
         )
 
         if terminated or truncated:
             observation, _ = rl_env.reset()
-            rl_env.pacman.display_orientation = 0.0
+            rl_env.pacman.display_orientation = rl_env.pacman.orientation
 
     pygame.quit()
 
